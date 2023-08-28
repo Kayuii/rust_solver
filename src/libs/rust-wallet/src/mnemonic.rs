@@ -1,83 +1,243 @@
-use ring::{pbkdf2};
-use std::time::{Instant};
-use sha2::{Sha256, Digest};
-use bitcoin_wallet::bitcoin::secp256k1::{Secp256k1, All};
-use bitcoin_wallet::bitcoin::network::constants::Network;
-use bitcoin_wallet::bitcoin::{Address};
-use bitcoin_wallet::bitcoin::util::bip32::{ExtendedPrivKey, ExtendedPubKey, DerivationPath};
-use rayon::prelude::*;
+//
+// Copyright 2018-2019 Tamas Blummer
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//!
+//! # BIP39 mnemonic
+//!
+//! TREZOR compatible mnemonic in english
+//!
+use account::{MasterKeyEntropy, Seed};
+use bitcoin::util::bip158::{BitStreamReader, BitStreamWriter};
+use crypto::{
+    digest::Digest,
+    hmac::Hmac,
+    pbkdf2::pbkdf2,
+    sha2::{Sha256, Sha512},
+};
+use error::Error;
+use rand::{thread_rng, RngCore};
+use std::io::Cursor;
 
-fn get_checksum(data: &[u8]) -> u8 {
-    let mut hasher = Sha256::new();
-    hasher.input(data);
-    let hash = hasher.result();
-    hash[0] >> 4
-}
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Mnemonic(Vec<usize>);
 
-fn mnemonic_from_int(i: u128) -> String {
-    let bytes: [u8; 16] = i.to_le_bytes();
-    let checksum: u8 = get_checksum(&bytes);
-    let mut current_shift = 117;
-    let mut mask: u128 = 2047 << current_shift;
-    let mut mnemonic: String = String::from("");
-    for _ in 0..11 {
-        mnemonic.push_str(WORDS[((i & mask) >> current_shift) as usize]);
-        mnemonic.push(' ');
-        mask = mask >> 11;
-        current_shift -= 11;
+impl ToString for Mnemonic {
+    fn to_string(&self) -> String {
+        self.0
+            .iter()
+            .map(|i| WORDS[*i])
+            .collect::<Vec<_>>()
+            .as_slice()
+            .join(" ")
     }
-    let last_index: usize = (((i & 127) << 4) | (checksum as u128)) as usize;
-    mnemonic.push_str(WORDS[last_index]);
-    mnemonic
 }
 
-fn seed_from_mnemonic(mnemonic: &String, passphrase: &[u8]) -> [u8; 64] {
-    let mut output = [0u8; 64];
-    let iterations: std::num::NonZeroU32 = std::num::NonZeroU32::new(2048).unwrap();
-    pbkdf2::derive(pbkdf2::PBKDF2_HMAC_SHA512, iterations, passphrase, mnemonic.as_bytes(), &mut output);
-    output
-}
-
-
-fn address_from_seed(seed: [u8; 64], secp: &Secp256k1<All>) -> String {
-    let master_private_key = ExtendedPrivKey::new_master(Network::Bitcoin, &seed).unwrap();
-    let path: DerivationPath = "m/49'/0'/0'/0/0".parse().unwrap();
-    let child_priv = master_private_key.derive_priv(&secp, &path).unwrap();
-    let child_pub = ExtendedPubKey::from_private(&secp, &child_priv);
-    let a: Address = Address::p2shwpkh(&child_pub.public_key, Network::Bitcoin);
-    return a.to_string();
-}
-
-fn check_int(i: u128, secp: &Secp256k1<All>) -> () {
-    let passphrase = "mnemonic".as_bytes();
-    let mnemonic: String = mnemonic_from_int(i);
-    let seed: [u8; 64] = seed_from_mnemonic(&mnemonic, &passphrase);
-    let _addr: String = address_from_seed(seed, &secp);
-}
-
-fn main() {
-    let secp: Secp256k1<All> = Secp256k1::new();
-    let known_words = ["army","excuse", "hero", "wolf", "disease", "liberty", "moral", "diagram", "treat", "stove", "absent"];
-    
-    let mut start_count: u128 = 0;
-    let mut start_shift = 128;
-    for word in &known_words {
-        start_shift -= 11;
-        let idx: u128 = WORDS.binary_search(word).unwrap() as u128;
-        start_count = start_count | (idx << start_shift);
+impl Mnemonic {
+    /// create a seed from mnemonic
+    /// with optional passphrase for plausible deniability see BIP39
+    pub fn to_seed(&self, pd_passphrase: Option<&str>) -> Seed {
+        let mut mac = Hmac::new(Sha512::new(), self.to_string().as_bytes());
+        let mut output = [0u8; 64];
+        let passphrase = "mnemonic".to_owned() + pd_passphrase.unwrap_or("");
+        pbkdf2(&mut mac, passphrase.as_bytes(), 2048, &mut output);
+        Seed(output.to_vec())
     }
-    let end_count: u128 = start_count | 2u128.pow(start_shift) - 1;
 
-    println!("start: {:b}", start_count);
-    println!("end: {:b}", end_count);
-    println!("{} possibilities", end_count - start_count);
-    
-    let start = Instant::now();
-    (start_count..end_count).into_par_iter().for_each(move |x| check_int(x, &secp));
-    println!("elapsed: {}", start.elapsed().as_millis());
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|s| WORDS[*s])
+    }
+
+    pub fn from_str(s: &str) -> Result<Mnemonic, Error> {
+        let words: Vec<_> = s.split(' ').collect();
+        if words.len() < 6 || words.len() % 6 != 0 {
+            return Err(Error::Mnemonic(
+                "Mnemonic must have a word count divisible with 6",
+            ));
+        }
+        let mut data = Vec::new();
+        let mut writer = BitStreamWriter::new(&mut data);
+        let mut mnemonic = Vec::new();
+        for word in &words {
+            if let Ok(idx) = WORDS.binary_search(word) {
+                mnemonic.push(idx);
+                writer.write(idx as u64, 11).unwrap();
+            } else {
+                return Err(Error::Mnemonic("Mnemonic contains an unknown word"));
+            }
+        }
+        writer.flush().unwrap();
+        let l = data.len();
+        let (payload, checksum) = data.split_at(l - if l > 33 { 2 } else { 1 });
+        if Self::checksum(payload).as_slice() != checksum {
+            return Err(Error::Mnemonic("Checksum failed"));
+        }
+
+        Ok(Mnemonic(mnemonic))
+    }
+
+    pub fn new_random(entropy: MasterKeyEntropy) -> Result<Mnemonic, Error> {
+        let len = match entropy {
+            MasterKeyEntropy::Sufficient => 16,
+            MasterKeyEntropy::Double => 32,
+            MasterKeyEntropy::Paranoid => 64,
+        };
+        let mut random = vec![0u8; len];
+        thread_rng().fill_bytes(random.as_mut_slice());
+        Self::new(random.as_slice())
+    }
+
+    /// create a mnemonic for some data
+    pub fn new(data: &[u8]) -> Result<Mnemonic, Error> {
+        if data.len() % 4 != 0 {
+            return Err(Error::Mnemonic(
+                "Data for mnemonic should have a length divisible by 4",
+            ));
+        }
+        let mut with_checksum = data.to_vec();
+        with_checksum.extend_from_slice(Self::checksum(data).as_slice());
+        let mut cursor = Cursor::new(&with_checksum);
+        let mut reader = BitStreamReader::new(&mut cursor);
+        let mlen = data.len() * 3 / 4;
+        let mut mnemonic = Vec::new();
+        for _ in 0..mlen {
+            mnemonic.push(reader.read(11).unwrap() as usize);
+        }
+        Ok(Mnemonic(mnemonic))
+    }
+
+    pub fn extend(&self) -> Result<Mnemonic, Error> {
+        if self.0.len() != 12 {
+            return Err(Error::Mnemonic(
+                "Can only extend mnemonic of 12 words to 24 words",
+            ));
+        }
+        let mut data = Vec::new();
+        let mut writer = BitStreamWriter::new(&mut data);
+        for idx in &self.0 {
+            writer.write(*idx as u64, 11).unwrap();
+        }
+        for _ in 0..11 {
+            writer.write(thread_rng().next_u64(), 11).unwrap();
+        }
+        writer.write(thread_rng().next_u64(), 3).unwrap();
+        writer.flush().unwrap();
+        data.extend_from_slice(Self::checksum(&data).as_slice());
+        let mut cursor = Cursor::new(&data[..]);
+        let mut reader = BitStreamReader::new(&mut cursor);
+        let mut mnemonic = Vec::new();
+        for _ in 0..24 {
+            mnemonic.push(reader.read(11).unwrap() as usize);
+        }
+        Ok(Mnemonic(mnemonic))
+    }
+
+    fn checksum(data: &[u8]) -> Vec<u8> {
+        let mut hash = [0u8; 32];
+        let mut checksum = Vec::new();
+        let mut writer = BitStreamWriter::new(&mut checksum);
+
+        let mut sha2 = Sha256::new();
+        sha2.input(data);
+        sha2.result(&mut hash);
+        let mut check_cursor = Cursor::new(&hash);
+        let mut check_reader = BitStreamReader::new(&mut check_cursor);
+        for _ in 0..data.len() / 4 {
+            writer.write(check_reader.read(1).unwrap(), 1).unwrap();
+        }
+        writer.flush().unwrap();
+        checksum
+    }
 }
 
-const WORDS: [&str; 2048] = [
+#[cfg(test)]
+mod test {
+    use std::fs::File;
+    use std::io::Read;
+    use std::path::PathBuf;
+
+    use bitcoin::hashes::hex::FromHex;
+    use bitcoin::network::constants::Network;
+    use serde_json::Value;
+
+    use context::SecpContext;
+
+    use super::*;
+
+    #[test]
+    fn test_mnemonic() {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("tests/BIP39.json");
+        let mut file = File::open(d).unwrap();
+        let mut data = String::new();
+        file.read_to_string(&mut data).unwrap();
+
+        let json: Value = serde_json::from_str(&data).unwrap();
+        let tests = json.as_array().unwrap();
+
+        let context: SecpContext = SecpContext::new();
+        let mut test_count = 0;
+
+        for t in 0..tests.len() {
+            let values = tests[t].as_array().unwrap();
+            let data = Vec::<u8>::from_hex(values[0].as_str().unwrap()).unwrap();
+            let m = values[1].as_str().unwrap();
+            let mnemonic = Mnemonic::from_str(m).unwrap();
+            let seed = mnemonic.to_seed(Some("TREZOR"));
+            assert_eq!(
+                mnemonic.to_string(),
+                Mnemonic::new(data.as_slice()).unwrap().to_string()
+            );
+            assert_eq!(seed.0, Vec::<u8>::from_hex(values[2].as_str().unwrap()).unwrap());
+
+            if values.len() == 4 {
+                let pk = values[3].as_str().unwrap();
+
+                let private_key =
+                    SecpContext::master_private_key(&context, Network::Bitcoin, &seed).unwrap();
+                let key = private_key.clone();
+
+                assert_eq!(key.to_string(), pk);
+                test_count += 1;
+            }
+        }
+        assert_eq!(test_count, 24); // 24 test cases with private key
+
+        assert!(Mnemonic::from_str(
+            "letter advice cage absurd amount doctor acoustic avoid letter advice cage above"
+        )
+        .is_ok());
+        assert!(Mnemonic::from_str(
+            "getter advice cage absurd amount doctor acoustic avoid letter advice cage above"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_extend() {
+        let short = Mnemonic::new_random(MasterKeyEntropy::Sufficient).unwrap();
+        let extended = short.extend().unwrap();
+        let check = Mnemonic::from_str(extended.to_string().as_str()).unwrap();
+        assert!(short
+            .iter()
+            .zip(check.iter())
+            .take(12)
+            .all(|(a, b)| *a == *b));
+    }
+}
+
+pub const WORDS: [&str; 2048] = [
     "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd",
     "abuse", "access", "accident", "account", "accuse", "achieve", "acid", "acoustic", "acquire",
     "across", "act", "action", "actor", "actress", "actual", "adapt", "add", "addict", "address",
