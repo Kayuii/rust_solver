@@ -20,7 +20,7 @@ void ripemd160_Init(RIPEMD160_CTX *ctx)
     ctx->state[4] = 0xC3D2E1F0;
 }
 
-void ripemd160_process( RIPEMD160_CTX *ctx, const uint8_t data[64] )
+void ripemd160_process( RIPEMD160_CTX *ctx, const __generic uint8_t data[64] )
 {
     uint32_t A, B, C, D, E, Ap, Bp, Cp, Dp, Ep, X[16];
 

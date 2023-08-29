@@ -43,13 +43,7 @@ void hash160_eyas(extended_private_key_t *target_private_key, uchar * hash160_ad
     extended_public_key_t target_public_key;
     public_from_private(target_private_key, &target_public_key);
 
-    uchar serialized_public[33] = {0};
-    serialized_public_key(&target_public_key, &serialized_public);
-
-    uchar sha256_result[32] = { 0 };
-    sha256(&serialized_public, 33, &sha256_result);
-
-    ripemd160(&sha256_result, 32, hash160_address);
+    hash160_for_public_key(&target_public_key, &hash160_address);
 }
 
 bool hardened_check(extended_private_key_t *input_key, uchar * target_address1, uchar * target_address2, uchar * res_address){

@@ -168,8 +168,8 @@ fn main() {
     let device_ids =
         core::get_device_ids(&platform_id, Some(ocl::flags::DEVICE_TYPE_GPU), None).unwrap();
 
-    let int_to_address_kernel: String = "prems_int_to_address".to_string();
-    let int_to_address_files = [
+    let prems_int_to_address_kernel: String = "prems_int_to_address".to_string();
+    let prems_int_to_address_files = [
         "common",
         "ripemd",
         "sha2",
@@ -185,8 +185,8 @@ fn main() {
         "prems_int_to_address",
     ];
 
-    let files = int_to_address_files;
-    let kernel_name = int_to_address_kernel;
+    let files = prems_int_to_address_files;
+    let kernel_name = prems_int_to_address_kernel;
 
     let mut raw_cl_file = "".to_string();
 
