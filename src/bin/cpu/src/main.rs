@@ -1,13 +1,13 @@
-use bitcoin::util::address::Error;
-use ring::pbkdf2;
-use std::time::Instant;
-use sha2::{Sha256, Digest};
-use bitcoin::secp256k1::{Secp256k1, All};
 use bitcoin::network::constants::Network;
+use bitcoin::secp256k1::{All, Secp256k1};
+use bitcoin::util::address::Error;
+use bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
 use bitcoin::Address;
-use bitcoin::util::bip32::{ExtendedPrivKey, ExtendedPubKey, DerivationPath};
-use rayon::prelude::*;
 use bitcoin_wallet::mnemonic::WORDS;
+use rayon::prelude::*;
+use ring::pbkdf2;
+use sha2::{Digest, Sha256};
+use std::time::Instant;
 
 fn get_checksum(data: &[u8]) -> u8 {
     let mut hasher = Sha256::new();
@@ -36,10 +36,15 @@ fn mnemonic_from_int(i: u128) -> String {
 fn gen_seed_from_mnemonic(mnemonic: &String, passphrase: &[u8]) -> [u8; 64] {
     let mut output = [0u8; 64];
     let iterations: std::num::NonZeroU32 = std::num::NonZeroU32::new(2048).unwrap();
-    pbkdf2::derive(pbkdf2::PBKDF2_HMAC_SHA512, iterations, passphrase, mnemonic.as_bytes(), &mut output);
+    pbkdf2::derive(
+        pbkdf2::PBKDF2_HMAC_SHA512,
+        iterations,
+        passphrase,
+        mnemonic.as_bytes(),
+        &mut output,
+    );
     output
 }
-
 
 fn address_from_seed(seed: [u8; 64], secp: &Secp256k1<All>) -> Result<Address, Error> {
     let master_private_key = ExtendedPrivKey::new_master(Network::Bitcoin, &seed).unwrap();
@@ -58,7 +63,10 @@ fn check_int(i: u128, secp: &Secp256k1<All>) -> () {
 
 fn main() {
     let secp: Secp256k1<All> = Secp256k1::new();
-    let known_words = ["army","excuse", "hero", "wolf", "disease", "liberty", "moral", "diagram", "treat", "stove", "absent"];
+    let known_words = [
+        "army", "excuse", "hero", "wolf", "disease", "liberty", "moral", "diagram", "treat",
+        "stove", "absent",
+    ];
 
     let mut start_count: u128 = 0;
     let mut start_shift = 128;
@@ -74,6 +82,8 @@ fn main() {
     println!("{} possibilities", end_count - start_count);
 
     let start = Instant::now();
-    (start_count..end_count).into_par_iter().for_each(move |x| check_int(x, &secp));
+    (start_count..end_count)
+        .into_par_iter()
+        .for_each(move |x| check_int(x, &secp));
     println!("elapsed: {} ms", start.elapsed().as_millis());
 }
