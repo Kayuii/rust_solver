@@ -13,6 +13,8 @@ use std::str;
 const WORK_SERVER_URL: &str = "http://localhost:3000";
 const WORK_SERVER_SECRET: &str = "secret";
 
+
+
 #[derive(Deserialize, Debug)]
 struct WorkResponse {
     indices: Vec<u128>,
@@ -208,17 +210,16 @@ fn main() {
         "int_to_address",
     ];
 
-    let files = int_to_address_files;
     let kernel_name = int_to_address_kernel;
 
-    let mut raw_cl_file = "".to_string();
-
-    for file in &files {
-        let file_path = format!("src/cl/{}.cl", file);
-        let file_str = fs::read_to_string(file_path).unwrap();
-        raw_cl_file.push_str(&file_str);
-        raw_cl_file.push_str("\n");
-    }
+    let files = int_to_address_files.map(|f| format!("cl/{}.cl", f));
+    let raw_cl_file = files.iter()
+    .fold(String::new(), |mut acc, path| {
+        println!("path {:?}", path);
+        acc.push_str(&fs::read_to_string(path).unwrap());
+        acc.push_str("\n");
+        acc
+    });
 
     let src_cstring = CString::new(raw_cl_file).unwrap();
 

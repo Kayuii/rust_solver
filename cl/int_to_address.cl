@@ -15,7 +15,7 @@ __kernel void int_to_address(ulong mnemonic_start_hi,ulong mnemonic_start_lo, __
   bytes[10] = (mnemonic_lo >> 40) & 0xFF;
   bytes[9] = (mnemonic_lo >> 48) & 0xFF;
   bytes[8] = (mnemonic_lo >> 56) & 0xFF;
-  
+
   bytes[7] = mnemonic_hi & 0xFF;
   bytes[6] = (mnemonic_hi >> 8) & 0xFF;
   bytes[5] = (mnemonic_hi >> 16) & 0xFF;
@@ -28,7 +28,7 @@ __kernel void int_to_address(ulong mnemonic_start_hi,ulong mnemonic_start_lo, __
   uchar mnemonic_hash[32];
   sha256(&bytes, 16, &mnemonic_hash);
   uchar checksum = (mnemonic_hash[0] >> 4) & ((1 << 4)-1);
-  
+
   ushort indices[12];
   indices[0] = (mnemonic_hi >> 53) & 2047;
   indices[1] = (mnemonic_hi >> 42) & 2047;
@@ -46,11 +46,11 @@ __kernel void int_to_address(ulong mnemonic_start_hi,ulong mnemonic_start_lo, __
   uchar mnemonic[180] = {0};
   uchar mnemonic_length = 11 + word_lengths[indices[0]] + word_lengths[indices[1]] + word_lengths[indices[2]] + word_lengths[indices[3]] + word_lengths[indices[4]] + word_lengths[indices[5]] + word_lengths[indices[6]] + word_lengths[indices[7]] + word_lengths[indices[8]] + word_lengths[indices[9]] + word_lengths[indices[10]] + word_lengths[indices[11]];
   int mnemonic_index = 0;
-  
+
   for (int i=0; i < 12; i++) {
     int word_index = indices[i];
     int word_length = word_lengths[word_index];
-    
+
     for(int j=0;j<word_length;j++) {
       mnemonic[mnemonic_index] = words[word_index][j];
       mnemonic_index++;
@@ -116,9 +116,8 @@ __kernel void int_to_address(ulong mnemonic_start_hi,ulong mnemonic_start_lo, __
 
   uchar hash160_address[20] = {0};
   hash160_for_public_key(&target_public_key, &hash160_address);
-
   uchar target_address[20] = {0xC7,0x9B,0xD6,0x99,0xEC,0xE8,0xA4,0x23,0xE5,0xB9,0x9C,0x35,0x98,0x6E,0x5D,0x75,0x59,0xA7,0xF3,0x4B};
-  
+
   bool found_target = 1;
   for(int i=0;i<20;i++) {
     if(hash160_address[i] != target_address[i]){

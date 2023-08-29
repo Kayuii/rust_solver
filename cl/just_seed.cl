@@ -28,7 +28,7 @@ __kernel void just_seed(ulong mnemonic_start_hi,ulong mnemonic_start_lo, __globa
   uchar mnemonic_hash[32];
   sha256(&bytes, 16, &mnemonic_hash);
   uchar checksum = mnemonic_hash[0] >> 4;
-  
+
   ushort indices[12];
   indices[0] = (mnemonic_hi & (2047 << 53)) >> 53;
   indices[1] = (mnemonic_hi & (2047 << 42)) >> 42;
@@ -47,11 +47,11 @@ __kernel void just_seed(ulong mnemonic_start_hi,ulong mnemonic_start_lo, __globa
 
   uchar mnemonic[180];
   int mnemonic_index = 0;
-  
+
   for (int i=0; i < 12; i++) {
     int word_index = indices[i];
     int word_length = word_lengths[word_index];
-    
+
     for(int j=0;j<word_length;j++) {
       mnemonic[mnemonic_index] = words[word_index][j];
       mnemonic_index++;

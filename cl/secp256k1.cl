@@ -15,7 +15,7 @@ static void secp256k1_ecmult_gen(secp256k1_gej *r,  secp256k1_scalar *gn) {
             uint32_t mask0, mask1;
             mask0 = (i == bits) + ~((uint32_t)0);
             mask1 = ~mask0;
-            
+
             adds.x.n[0] = (adds.x.n[0] & mask0) | (prec[j][i].x.n[0] & mask1);
             adds.x.n[1] = (adds.x.n[1] & mask0) | (prec[j][i].x.n[1] & mask1);
             adds.x.n[2] = (adds.x.n[2] & mask0) | (prec[j][i].x.n[2] & mask1);
@@ -56,15 +56,15 @@ int secp256k1_ec_pubkey_create(secp256k1_pubkey *pubkey, const unsigned char *se
     int ret = 0;
 
     memset(pubkey, 0, sizeof(*pubkey));
-    
+
     ret = secp256k1_scalar_set_b32_seckey(&sec, seckey);
-    
+
     secp256k1_scalar_cmov(&sec, &secp256k1_scalar_one, !ret);
 
     secp256k1_ecmult_gen(&pj, &sec);
     secp256k1_ge_set_gej(&p, &pj);
     secp256k1_pubkey_save(pubkey, &p);
-    
+
     memczero(pubkey, sizeof(*pubkey), !ret);
 
     secp256k1_scalar_clear(&sec);
@@ -99,7 +99,7 @@ static int secp256k1_pubkey_load(secp256k1_ge* ge, const secp256k1_pubkey* pubke
   secp256k1_fe_set_b32(&x, pubkey->data);
   secp256k1_fe_set_b32(&y, pubkey->data + 32);
   secp256k1_ge_set_xy(ge, &x, &y);
-   
+
   return 1;
 }
 

@@ -19,7 +19,7 @@ __kernel void just_address(ulong mnemonic_start_hi,ulong mnemonic_start_lo, __gl
   uchar network = BITCOIN_MAINNET;
   extended_private_key_t master_private;
   extended_public_key_t master_public;
-  
+
   new_master_from_seed(network, &seed, &master_private);
   public_from_private(&master_private, &master_public);
 

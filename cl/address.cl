@@ -151,7 +151,7 @@ void p2shwpkh_address_for_public_key(extended_public_key_t *pub, uchar *address_
   for(int i=0;i<20;i++) {
     address_bytes[i+1] = wpkh_script_hash[i];
   }
-  
+
   uchar sha256d_result[32] = { 0 };
   sha256d(address_bytes, 21, &sha256d_result);
 
@@ -198,9 +198,9 @@ void hardened_private_child_from_private(extended_private_key_t *parent, extende
   hmac_input[34] = (child_number & 0x00FF0000) >> 16;
   hmac_input[35] = (child_number & 0x0000FF00) >> 8;
   hmac_input[36] = (child_number & 0x000000FF);
-  
+
   hmac_sha512(&parent->chain_code, 32, &hmac_input, 37, &hmacsha512_result);
-  
+
   private_key_t sk;
   sk.compressed = true;
   sk.network = parent->network;
