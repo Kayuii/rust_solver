@@ -9,8 +9,7 @@ edition = "2021"
 resolver = "2"
 members = [
     # Binaries
-    "src/bin/cpu",
-    "src/bin/gpu",
+    "src/bin",
     # Common
     "src/libs/rust-wallet",
 ]

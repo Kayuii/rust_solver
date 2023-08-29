@@ -1304,23 +1304,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "solver-cpu"
-version = "1.0.0"
-dependencies = [
- "bitcoin",
- "bitcoin-wallet",
- "rayon",
- "ring",
- "sha2",
-]
-
-[[package]]
 name = "solver-gpu"
 version = "1.0.0"
 dependencies = [
  "bitcoin",
  "bitcoin-wallet",
  "hex",
+ "num_cpus",
  "ocl",
  "rayon",
  "reqwest",

@@ -9,6 +9,12 @@ use ring::pbkdf2;
 use sha2::{Digest, Sha256};
 use std::time::Instant;
 
+struct Addresses {
+    p2pkh: Address,
+    p2shwpkh: Option<Address>,
+    p2wpkh: Option<Address>
+  }
+
 fn get_checksum(data: &[u8]) -> u8 {
     let mut hasher = Sha256::new();
     hasher.input(data);
@@ -46,12 +52,17 @@ fn gen_seed_from_mnemonic(mnemonic: &String, passphrase: &[u8]) -> [u8; 64] {
     output
 }
 
-fn address_from_seed(seed: [u8; 64], secp: &Secp256k1<All>) -> Result<Address, Error> {
+fn address_from_seed(seed: [u8; 64], secp: &Secp256k1<All>) {
     let master_private_key = ExtendedPrivKey::new_master(Network::Bitcoin, &seed).unwrap();
     let path: DerivationPath = "m/49'/0'/0'/0/0".parse().unwrap();
     let child_priv = master_private_key.derive_priv(&secp, &path).unwrap();
     let child_pub = ExtendedPubKey::from_private(&secp, &child_priv);
-    Address::p2shwpkh(&child_pub.public_key, Network::Bitcoin)
+    let p2pkh = Address::p2pkh(&child_pub.public_key, Network::Bitcoin);
+    let p2shwpkh = Address::p2shwpkh(&child_pub.public_key, Network::Bitcoin).ok();
+    let p2wpkh = Address::p2wpkh(&child_pub.public_key, Network::Bitcoin).ok();
+    println!("p2pkh:    {}", p2pkh);
+    println!("p2shwpkh: {}", p2shwpkh.unwrap());
+    println!("p2wpkh:   {}", p2wpkh.unwrap());
 }
 
 fn check_int(i: u128, secp: &Secp256k1<All>) -> () {
@@ -63,27 +74,22 @@ fn check_int(i: u128, secp: &Secp256k1<All>) -> () {
 
 fn main() {
     let secp: Secp256k1<All> = Secp256k1::new();
-    let known_words = [
-        "army", "excuse", "hero", "wolf", "disease", "liberty", "moral", "diagram", "treat",
-        "stove", "absent",
-    ];
 
-    let mut start_count: u128 = 0;
-    let mut start_shift = 128;
-    for word in &known_words {
-        start_shift -= 11;
-        let idx: u128 = WORDS.binary_search(word).unwrap() as u128;
-        start_count = start_count | (idx << start_shift);
-    }
-    let end_count: u128 = start_count | 2u128.pow(start_shift) - 1;
+    rayon::ThreadPoolBuilder::new()
+    .num_threads(num_cpus::get())
+    .build_global()
+    .unwrap();
 
-    println!("start: {:b}", start_count);
-    println!("end: {:b}", end_count);
-    println!("{} possibilities", end_count - start_count);
+    let start = 1_000_000_000;
+    let end = 1_000_000_100;
 
-    let start = Instant::now();
-    (start_count..end_count)
-        .into_par_iter()
-        .for_each(move |x| check_int(x, &secp));
-    println!("elapsed: {} ms", start.elapsed().as_millis());
+    let passphrase = b"mnemonic";
+
+    (start..end).into_par_iter().for_each(|i| {
+      let mnemonic = mnemonic_from_int(i);
+      println!("{}", mnemonic);
+      let seed = gen_seed_from_mnemonic(&mnemonic, passphrase);
+      address_from_seed(seed, &secp);
+    });
+
 }
