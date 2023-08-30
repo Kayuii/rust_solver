@@ -57,14 +57,6 @@ __kernel void prems_int_to_address(ulong start_index, __global uchar * res_addre
     key_previous_concat[x+128] = salt[x];
   }
 
-
-  uchar password[12] = { 109, 110, 101, 109, 111, 110, 105, 99, 0, 0, 0, 1 };
-  for(int x=0;x<16;x++){
-    key_previous_concat[x+128+12] = password[x];
-  }
-
-
-
   sha512(&key_previous_concat, 140, &sha512_result);
   copy_pad_previous(&opad_key, &sha512_result, &key_previous_concat);
   sha512(&key_previous_concat, 192, &sha512_result);
