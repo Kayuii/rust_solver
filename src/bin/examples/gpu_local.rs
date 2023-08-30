@@ -149,16 +149,16 @@ fn mnemonic_gpu(
             // };
             // let address = addr.trim_matches(char::from(0));
             println!("{}", hex::encode(res_address));
-
             break;
             // log_solution(work.offset, mnemonic.to_string());
         }
         index = index + items;
+        println!("index is: {:?}", index);
         if index > 478000000 {
             break;
         }
         let duration = start.elapsed();
-        println!("Time elapsed in expensive_function() is: {:?}", duration);
+        println!("Time elapsed in expensive_function() is: {:?} s", duration);
     }
     return Ok(());
 }
